@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 import cv2
@@ -8,10 +9,31 @@ from tensorflow.keras.models import model_from_json
 import datetime
 import os
 import pymysql
+from fastapi.templating import Jinja2Templates
+import cloudinary
+import cloudinary.uploader
 
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+templates = Jinja2Templates(directory="templates")
+
+
+valid_username = "admin"
+valid_password = "password"
+
+@app.get("/login",response_class=HTMLResponse)
+async def getLogin(request: Request):
+    return templates.TemplateResponse("login.html",{"request": request})
+
+@app.post("/login/", response_class=HTMLResponse)
+async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == valid_username and password == valid_password:
+        return templates.TemplateResponse("upload.html", {"request": request, "message": "Login successful!"})
+    else:
+        return templates.TemplateResponse("login.html", {"request": request, "message": "Invalid credentials. Please try again."})
 
 @app.post("/upload/")
 async def upload_action(request: Request, t1: str = Form(...), t2: str = Form(...), t3: str = Form(...), t4: str = Form(...), t5: UploadFile = File(...)):
@@ -47,14 +69,16 @@ async def upload_action(request: Request, t1: str = Form(...), t2: str = Form(..
         preds = missing_child_classifier.predict(img)
         if(np.amax(preds) > 0.60):
             status = 'Child found in missing database'
+        else:
+            cloudinary.config(
+                cloud_name="",
+                api_key="",
+                api_secret=""
+            )
+            result = cloudinary.uploader.upload(contents, folder="missing_children")
+            status = f"Image uploaded to Cloudinary. Public URL: {result['secure_url']}"
     now = datetime.datetime.now()
     current_time = now.strftime("%Y-%m-%d %H:%M:%S")
     filename = os.path.basename(t5.filename)
-    # db_connection = pymysql.connect(host='127.0.0.1',port = 3306,user = 'root', password = 'root', database = 'MissingChildDB',charset='utf8')
-    # db_cursor = db_connection.cursor()
-    # query = "INSERT INTO missing(person_name,child_name,contact_no,location,image,upload_date,status) VALUES('"+t1+"','"+t2+"','"+t3+"','"+t4+"','"+filename+"','"+str(current_time)+"','"+status+"')"
-    # db_cursor.execute(query)
-    # db_connection.commit()
-    # print(db_cursor.rowcount, "Record Inserted")
-    context= {'data':'Thank you for uploading. '+status}
+    context = {'data': f"Thank you for uploading. {status}"}
     return JSONResponse(content=context)
