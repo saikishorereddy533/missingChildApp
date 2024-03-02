@@ -11,6 +11,7 @@ import os
 import pymysql
 from fastapi.templating import Jinja2Templates
 import cloudinary
+import cloudinary.api
 import cloudinary.uploader
 
 app = FastAPI()
@@ -20,6 +21,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
+cloudinary.config(
+                cloud_name="ddy07zvko",
+                api_key="883112828989144",
+                api_secret="cpXSBlg_BpEGaBfnw5o2wDN3ThA"
+            )
 
 valid_username = "admin"
 valid_password = "password"
@@ -70,11 +76,6 @@ async def upload_action(request: Request, t1: str = Form(...), t2: str = Form(..
         if(np.amax(preds) > 0.60):
             status = 'Child found in missing database'
         else:
-            cloudinary.config(
-                cloud_name="",
-                api_key="",
-                api_secret=""
-            )
             result = cloudinary.uploader.upload(contents, folder="missing_children")
             status = f"Image uploaded to Cloudinary. Public URL: {result['secure_url']}"
     now = datetime.datetime.now()
@@ -82,3 +83,29 @@ async def upload_action(request: Request, t1: str = Form(...), t2: str = Form(..
     filename = os.path.basename(t5.filename)
     context = {'data': f"Thank you for uploading. {status}"}
     return JSONResponse(content=context)
+
+@app.get("/images/", response_class=HTMLResponse)
+async def list_images(request: Request):
+    images = cloudinary.api.resources(type="upload", prefix="missing_children")
+
+    image_html = ""
+    for image in images["resources"]:
+        image_url = image["secure_url"]
+        image_html += f'<img src="{image_url}" alt="Image" style="max-width: 300px; margin: 10px;">'
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Stored Images</title>
+    </head>
+    <body>
+        <h1>Stored Images</h1>
+        {image_html}
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html_content)
